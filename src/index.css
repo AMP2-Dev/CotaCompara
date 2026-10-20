@@ -920,3 +920,617 @@ h3 { font-size: 16px; font-weight: 700; }
 @media (max-width: 900px) {
   .ped-linha { grid-template-columns: 24px 1fr 1fr 44px; grid-template-areas: "n prod prod prod" ". qtd un rm" ". preco sub sub"; }
 }
+
+
+/* =========================================================
+   Etapa 2: Link de Pedidos e Carimbo de Aprovação
+   ========================================================= */
+
+/* ---------- Carimbo de Aprovação Eletrônica ---------- */
+.carimbo-aprovacao {
+  border: 3px double #00753A;
+  background: #F2FBF6;
+  border-radius: 8px;
+  padding: 12px 14px;
+  color: #064E26;
+  font-size: 12px;
+  line-height: 1.4;
+  margin: 12px 0;
+}
+.carimbo-corpo {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  justify-content: space-between;
+}
+.carimbo-info {
+  flex: 1;
+  min-width: 0;
+}
+.carimbo-topo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  flex-wrap: wrap;
+}
+.carimbo-icone {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #00753A;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+}
+.carimbo-titulo {
+  font-family: var(--fonte-destaque);
+  font-weight: 800;
+  letter-spacing: 0.6px;
+  font-size: 12px;
+  color: #00753A;
+}
+.carimbo-codigo {
+  font-weight: 700;
+  font-size: 12px;
+  color: #064E26;
+  background: rgba(0, 117, 58, 0.12);
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+.carimbo-linhas {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.carimbo-hash {
+  color: var(--texto-2);
+  font-size: 11px;
+}
+.carimbo-rodape {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px dashed rgba(0, 117, 58, 0.3);
+  font-size: 11px;
+  color: var(--texto-2);
+}
+.carimbo-qr {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+.carimbo-qr img {
+  border: 1px solid #c3e6d2;
+  border-radius: 4px;
+  background: #fff;
+  padding: 2px;
+}
+.carimbo-qr-label {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--texto-3);
+  font-weight: 600;
+}
+
+@media print {
+  .carimbo-aprovacao {
+    border: 2px double #00753A !important;
+    background: #FAFAFA !important;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+}
+
+/* ---------- Card Seu link de pedidos (lado fornecedor) ---------- */
+.card-link-pedidos {
+  border-left: 4px solid var(--azul);
+  background: #fff;
+}
+.link-pedidos-topo {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+.link-pedidos-barra {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.link-pedidos-barra .input {
+  min-width: 240px;
+  background: #F9FAFB;
+}
+@media (max-width: 720px) {
+  .link-pedidos-barra .input { min-width: 100%; }
+}
+
+/* ---------- Pedidos pelo link (painel e lista) ---------- */
+.destaque-proto {
+  color: var(--cor-primaria);
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+.pedidos-link-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.pedido-link-item-painel {
+  border: 1px solid var(--borda);
+  border-radius: var(--raio);
+  padding: 12px 14px;
+  background: #fff;
+}
+.pedido-link-item-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.pedido-link-acoes {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.pedido-link-detalhe-itens {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--borda);
+}
+.pedido-obs-bloco {
+  background: #FBFBFB;
+  border-left: 3px solid var(--amarelo-escuro);
+  padding: 6px 10px;
+  font-size: 13px;
+  margin-bottom: 8px;
+  border-radius: 0 var(--raio) var(--raio) 0;
+}
+.tabela-mini {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.tabela-mini th {
+  text-align: left;
+  font-size: 11px;
+  text-transform: uppercase;
+  color: var(--texto-3);
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--borda);
+}
+.tabela-mini td {
+  padding: 6px 8px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+/* ---------- Página Pública /p/:token (Mobile First) ---------- */
+.pedido-link-wrap {
+  min-height: 100vh;
+  background: #F3F4F6;
+  padding: 16px 12px 40px;
+  display: flex;
+  justify-content: center;
+}
+.pedido-link-card {
+  width: 100%;
+  max-width: 580px;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  padding: 24px 20px;
+  box-sizing: border-box;
+}
+@media (max-width: 480px) {
+  .pedido-link-card {
+    padding: 18px 14px;
+    border-radius: 8px;
+  }
+}
+.pedido-link-cab {
+  text-align: center;
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--borda);
+}
+.pedido-link-subtitulo {
+  font-size: 13px;
+  color: var(--texto-2);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.pedido-link-titulo {
+  font-family: var(--fonte-destaque);
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--texto);
+  margin: 4px 0 2px;
+  word-break: break-word;
+}
+.pedido-link-local {
+  font-size: 13px;
+  color: var(--texto-3);
+}
+
+.secao-form {
+  margin-bottom: 22px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--borda);
+}
+.secao-form h3 {
+  font-size: 16px;
+  margin: 0 0 12px;
+  color: var(--texto);
+}
+.secao-form-topo {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 10px;
+}
+.obrigatorio {
+  color: var(--vermelho);
+}
+.grid-2-col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+@media (max-width: 480px) {
+  .grid-2-col {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+}
+
+.pedido-itens-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.pedido-item-linha {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  background: #FAFAFA;
+  border: 1px solid var(--borda);
+  border-radius: 8px;
+  padding: 10px;
+}
+.pedido-item-num {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--texto-3);
+  width: 18px;
+  padding-top: 8px;
+}
+.pedido-item-campos {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.pedido-item-detalhes {
+  display: flex;
+  gap: 8px;
+}
+.item-qtd-wrap {
+  width: 90px;
+}
+.item-un-wrap {
+  width: 110px;
+}
+.rotulo-mini {
+  display: block;
+  font-size: 11px;
+  color: var(--texto-3);
+  margin-bottom: 2px;
+  text-transform: uppercase;
+}
+.btn-remover-item {
+  background: none;
+  border: none;
+  font-size: 22px;
+  color: var(--texto-3);
+  cursor: pointer;
+  padding: 2px 6px;
+  line-height: 1;
+}
+.btn-remover-item:hover {
+  color: var(--vermelho);
+}
+.input-mini {
+  font-size: 13px !important;
+  padding: 6px 10px !important;
+}
+.pedido-itens-botoes {
+  margin-top: 12px;
+}
+.btn-bloco {
+  width: 100%;
+  justify-content: center;
+}
+.pedido-link-cta {
+  margin-top: 24px;
+  padding-top: 18px;
+  border-top: 1px solid var(--borda);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 13px;
+  text-align: left;
+}
+.pedido-link-card.sucesso {
+  text-align: center;
+}
+.sucesso-icone {
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  background: var(--verde);
+  color: #fff;
+  font-size: 28px;
+  font-weight: 800;
+  display: grid;
+  place-items: center;
+  margin: 0 auto 12px;
+}
+.sucesso-sub {
+  font-size: 16px;
+  margin: 6px 0 14px;
+}
+.sucesso-texto {
+  color: var(--texto-2);
+  line-height: 1.5;
+  margin-bottom: 20px;
+}
+.sucesso-acoes {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+/* ---------- Modal de Aprovação e Comprovante ---------- */
+.card-compacto {
+  background: #F9FAFB;
+  border: 1px solid var(--borda);
+  border-radius: 6px;
+  padding: 8px 12px;
+}
+.grid-cnpj-compacto {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px 14px;
+  font-size: 12px;
+}
+@media (max-width: 500px) {
+  .grid-cnpj-compacto { grid-template-columns: 1fr; }
+}
+.cnpj-rotulo {
+  display: block;
+  font-size: 10px;
+  text-transform: uppercase;
+  color: var(--texto-3);
+  font-weight: 600;
+}
+.cnpj-valor {
+  font-weight: 500;
+  color: var(--texto);
+  word-break: break-word;
+}
+.selo-cpf-informado {
+  background: #FFFBEB;
+  border: 1px solid #FDE68A;
+  color: #92400E;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  margin-top: 8px;
+}
+
+.resumo-aprovacao-card {
+  background: #FAFAFA;
+  border: 1px solid var(--borda);
+  border-radius: 8px;
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+}
+.resumo-linha {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+.resumo-linha > span:first-child {
+  color: var(--texto-2);
+}
+
+.recibo-comprovante {
+  padding: 8px 0;
+  text-align: center;
+}
+.recibo-topo {
+  margin-bottom: 14px;
+}
+.recibo-icone {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--verde);
+  color: #fff;
+  font-size: 24px;
+  font-weight: 800;
+  display: grid;
+  place-items: center;
+  margin: 0 auto 6px;
+}
+.recibo-destaque {
+  background: #F0FDF4;
+  border: 1px solid #BBF7D0;
+  border-radius: 8px;
+  padding: 10px;
+  margin-bottom: 14px;
+}
+.recibo-codigo {
+  font-family: var(--fonte-destaque);
+  font-size: 24px;
+  font-weight: 800;
+  color: #166534;
+  letter-spacing: 1px;
+}
+.recibo-grade {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 14px;
+  text-align: left;
+  background: #FAFAFA;
+  border: 1px solid var(--borda);
+  border-radius: 8px;
+  padding: 12px 14px;
+  font-size: 12px;
+}
+@media (max-width: 480px) {
+  .recibo-grade { grid-template-columns: 1fr; }
+}
+.recibo-rotulo {
+  display: block;
+  font-size: 10px;
+  text-transform: uppercase;
+  color: var(--texto-3);
+  font-weight: 600;
+}
+.recibo-dado {
+  font-weight: 600;
+  color: var(--texto);
+}
+.recibo-qr-bloco {
+  margin-top: 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* ---------- Tela de Verificação /v/:codigo ---------- */
+.verificar-wrap {
+  min-height: 100vh;
+  background: #F3F4F6;
+  padding: 24px 16px 40px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.verificar-topo {
+  margin-bottom: 16px;
+}
+.verificar-card {
+  width: 100%;
+  max-width: 560px;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  padding: 28px 24px;
+  box-sizing: border-box;
+}
+.status-icone {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  font-size: 28px;
+  font-weight: 800;
+  display: grid;
+  place-items: center;
+  margin: 0 auto 12px;
+}
+.status-ok { background: var(--verde); color: #fff; }
+.status-erro { background: var(--vermelho); color: #fff; }
+.status-aviso { background: #DC2626; color: #fff; }
+
+.titulo-valido {
+  color: #166534;
+  margin: 0 0 4px;
+  font-size: 22px;
+  text-align: center;
+}
+.subtitulo-valido {
+  color: var(--texto-2);
+  font-size: 13px;
+  text-align: center;
+  margin: 0 0 20px;
+}
+.titulo-invalido {
+  color: #B91C1C;
+  margin: 0 0 4px;
+  font-size: 20px;
+  text-align: center;
+}
+.subtitulo-invalido {
+  color: var(--texto-2);
+  font-size: 13px;
+  text-align: center;
+  margin: 0 0 20px;
+}
+.verificar-info-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 16px;
+  background: #FAFAFA;
+  border: 1px solid var(--borda);
+  border-radius: 8px;
+  padding: 14px 16px;
+  font-size: 13px;
+}
+@media (max-width: 480px) {
+  .verificar-info-grid { grid-template-columns: 1fr; }
+}
+.info-bloco {
+  display: flex;
+  flex-direction: column;
+}
+.info-full {
+  grid-column: 1 / -1;
+}
+.info-rotulo {
+  font-size: 11px;
+  text-transform: uppercase;
+  color: var(--texto-3);
+  font-weight: 600;
+}
+.info-valor {
+  font-weight: 500;
+  color: var(--texto);
+}
+.destaque-cod {
+  font-size: 16px;
+  color: var(--cor-primaria);
+  font-weight: 800;
+}
+.hash-quebra {
+  font-size: 11px;
+  word-break: break-all;
+  color: var(--texto-2);
+}
+.base-legal-nota {
+  margin-top: 14px;
+  text-align: center;
+  font-size: 11px;
+  color: var(--texto-3);
+}
+.verificar-rodape-acoes {
+  margin-top: 20px;
+  display: flex;
+  justify-content: center;
+}

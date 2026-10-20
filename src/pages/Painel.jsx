@@ -14,6 +14,7 @@ export default function Painel() {
   const [economiaTotal, setEconomiaTotal] = useState(0)
   const [carregando, setCarregando] = useState(true)
   const [pedidosAbertos, setPedidosAbertos] = useState(0)
+  const [pedidosLinkAbertos, setPedidosLinkAbertos] = useState(0)
   const [propostas, setPropostas] = useState([])
 
   // integração entre usuários: pedidos que chegaram para mim e orçamentos que fornecedores me mandaram
@@ -22,6 +23,23 @@ export default function Painel() {
     supabase.rpc('pedidos_recebidos').then(({ data }) =>
       setPedidosAbertos((data || []).filter((p) => p.cotacao.aberta && (!p.respondido_em || p.pode_corrigir)).length))
     supabase.rpc('propostas_recebidas').then(({ data }) => setPropostas(data || []))
+
+    // Pedidos pelo link público aguardando
+    const carregarPedidosLink = () => {
+      supabase
+        .from('pedidos_link')
+        .select('id', { count: 'exact', head: true })
+        .eq('status', 'pendente')
+        .then(({ count }) => setPedidosLinkAbertos(count || 0))
+    }
+    carregarPedidosLink()
+
+    const canalPedLink = supabase
+      .channel('painel-pedidos-link')
+      .on('postgres_changes', { event: '*', schema: SCHEMA, table: 'pedidos_link' }, carregarPedidosLink)
+      .subscribe()
+
+    return () => { supabase.removeChannel(canalPedLink) }
   }, [empresa])
 
   useEffect(() => {
@@ -117,6 +135,17 @@ export default function Painel() {
           <div className="detalhe">vencedor × proposta mais cara</div>
         </div>
       </div>
+
+      {pedidosLinkAbertos > 0 && (
+        <Link to="/orcamentos" className="card orc-chamada ped-alerta" style={{ borderColor: 'var(--cor-primaria)' }}>
+          <span className="orc-chamada-icone">⚡</span>
+          <span>
+            <b>Você tem {pedidosLinkAbertos} {pedidosLinkAbertos === 1 ? 'pedido pelo link aguardando você' : 'pedidos pelo link aguardando você'}</b>
+            <small>Clientes acessaram seu link direto de pedidos e enviaram listas para você precificar.</small>
+          </span>
+          <span className="orc-chamada-seta">Ver pedidos →</span>
+        </Link>
+      )}
 
       {pedidosAbertos > 0 && (
         <Link to="/orcamentos" className="card orc-chamada ped-alerta">

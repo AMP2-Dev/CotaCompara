@@ -255,3 +255,41 @@ src/
 3. ~~Tela pública do fornecedor `/r/:token`~~ ✅
 4. Disparo de e-mail via Resend (Edge Function) + status enviado/aberto/respondido
 5. ~~Mapa de cotação, menor preço por item/total, dashboard, export~~ ✅ (adiantado)
+
+
+---
+
+## Etapa 2 — Link de Pedidos e Aprovação Eletrônica com Carimbo
+
+**Banco:** rodar `supabase/08_link_e_aprovacao.sql` no SQL Editor do Supabase (projeto Fixos).
+
+- **Link público para pedidos de clientes** (`/p/:token`):
+  - Cada empresa possui um link fixo e exclusivo para receber pedidos de orçamento diretamente de seus clientes, sem necessidade de login.
+  - O cliente informa nome, WhatsApp e/ou e-mail, documento opcional e lista até 10 itens com quantidade, unidade e observações.
+  - Proteção antispam inteligente: honeypot invisível, bloqueio temporário de envio nos primeiros segundos, limitação por IP e trava de pedidos pendentes por empresa.
+  - Tela mobile-first com design responsivo (sem rolagem horizontal em celulares).
+  - Gera protocolo imediato (`PED-XXXX-XXXX`).
+  - No menu **Clientes**, o fornecedor gerencia o link (copiar, enviar no WhatsApp, desativar/ativar e gerar novo link).
+  - Pedidos recebidos pelo link aparecem em tempo real via Supabase Realtime, permitindo **Aceitar e montar orçamento** (gera rascunho com dados e itens) ou **Recusar**.
+  - No **Painel**, alerta visual dedicado quando houver pedidos pendentes aguardando resposta.
+
+- **Aprovação Eletrônica com Carimbo e Verificação Pública**:
+  - Base legal: assinatura eletrônica simples (Lei Federal nº 14.063/2020). Custo zero por uso.
+  - Fluxo de aprovação em 3 passos no modal do orçamento público (`/o/:token`):
+    1. **Identificação**: escolha entre CNPJ ou CPF.
+       - CNPJ: validação matemática e consulta automática na Receita Federal (BrasilAPI com reserva em CNPJ.ws) trazendo dados cadastrais compactos.
+       - CPF: validação local dos dígitos verificadores com selo informativo.
+       - Nome completo obrigatório de quem está aprovando.
+    2. **Confirmação**: resumo do orçamento, aceite formal de condições e aviso de conformidade LGPD.
+    3. **Comprovante**: recibo com código grande (`APV-XXXX-XXXX`), data/hora, fornecedor, aprovador, hash criptográfico SHA-256 e QR code dinâmico para validação.
+  - **Carimbo de Aprovação Eletrônica** (`CarimboAprovacao.jsx`):
+    - Visual estilizado com borda dupla verde, dados da aprovação, hash e QR Code.
+    - Exibido no topo do orçamento público e lado do fornecedor (`OrcamentoEditar.jsx`).
+    - Sai impresso no PDF logo após os totais do orçamento.
+  - **Trava de Imutabilidade**:
+    - Trigger no PostgreSQL bloqueia qualquer alteração em itens, quantidades, preços, frete, desconto ou prazos de orçamentos aprovados (`ORCAMENTO_APROVADO_TRAVADO`).
+    - No lado do fornecedor, o orçamento aprovado fica somente leitura, oferecendo o botão **Duplicar** para gerar um novo orçamento baseado no anterior.
+  - **Página de Verificação Pública** (`/v/:codigo`):
+    - Acessível via QR code ou link direto, sem login.
+    - Valida a integridade criptográfica do hash canônico contra o banco de dados.
+    - Exibe confirmação visual verde (íntegro) ou vermelha (alterado), com os dados do orçamento e documento do cliente protegido por máscara.

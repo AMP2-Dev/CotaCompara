@@ -13,6 +13,35 @@ export function mascaraCnpj(valor) {
     .replace(/(\d{4})(\d)/, '$1-$2')
 }
 
+export function mascaraCpf(valor) {
+  const d = so(valor).slice(0, 11)
+  return d
+    .replace(/^(\d{3})(\d)/, '$1.$2')
+    .replace(/^(\d{3})\.(\d{3})(\d)/, '$1.$2.$3')
+    .replace(/\.(\d{3})(\d)/, '.$1-$2')
+}
+
+export function mascaraDocumento(valor) {
+  const d = so(valor)
+  if (d.length <= 11) return mascaraCpf(d)
+  return mascaraCnpj(d)
+}
+
+export function cpfValido(valor) {
+  const c = so(valor)
+  if (c.length !== 11 || /^(\d)\1{10}$/.test(c)) return false
+  let soma = 0
+  for (let i = 0; i < 9; i++) soma += Number(c[i]) * (10 - i)
+  let r = soma % 11
+  const d1 = r < 2 ? 0 : 11 - r
+  if (Number(c[9]) !== d1) return false
+  soma = 0
+  for (let i = 0; i < 10; i++) soma += Number(c[i]) * (11 - i)
+  r = soma % 11
+  const d2 = r < 2 ? 0 : 11 - r
+  return Number(c[10]) === d2
+}
+
 export function cnpjValido(valor) {
   const c = so(valor)
   if (c.length !== 14 || /^(\d)\1{13}$/.test(c)) return false

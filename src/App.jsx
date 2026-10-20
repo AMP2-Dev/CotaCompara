@@ -26,6 +26,8 @@ const ResponderCotacao = lazy(() => import('./pages/ResponderCotacao'))
 const OrcamentoEditar = lazy(() => import('./pages/OrcamentoEditar'))
 const OrcamentoPublico = lazy(() => import('./pages/OrcamentoPublico'))
 const PedidoResponder = lazy(() => import('./pages/PedidoResponder'))
+const PedidoLink = lazy(() => import('./pages/PedidoLink'))
+const VerificarAprovacao = lazy(() => import('./pages/VerificarAprovacao'))
 
 function Inicio() {
   const { session, carregando } = useAuth()
@@ -53,6 +55,12 @@ export default function App() {
 
       {/* Orçamento enviado pelo fornecedor ao cliente (sem login) */}
       <Route path="/o/:token" element={<OrcamentoPublico />} />
+
+      {/* Pedido de orçamento enviado pelo cliente à empresa (sem login) */}
+      <Route path="/p/:token" element={<PedidoLink />} />
+
+      {/* Verificação pública de aprovação eletrônica / QR code (sem login) */}
+      <Route path="/v/:codigo" element={<VerificarAprovacao />} />
 
       {/* Relatório para impressão (sem menu) */}
       <Route path="/cotacoes/:id/imprimir" element={<RotaProtegida><CotacaoImprimir /></RotaProtegida>} />

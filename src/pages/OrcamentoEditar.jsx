@@ -8,14 +8,15 @@ import {
 } from '../lib/format'
 import { lerItens, buscarNoCatalogo } from '../lib/leitorItens'
 import { lerArquivo, tipoArquivo } from '../lib/leitorArquivos'
-import { cnpjValido, consultarCnpj, mascaraCnpj, nomeExibicao } from '../lib/cnpj'
+import { cnpjValido, consultarCnpj, mascaraCnpj, mascaraCpf, nomeExibicao } from '../lib/cnpj'
 import Badge from '../components/Badge'
+import CarimboAprovacao from '../components/CarimboAprovacao'
 import { IconeLixo, IconeVoltar, IconeWhats, IconeLink, IconeEmail } from '../components/Icones'
 
 let seq = 0
 const novoItem = (d = {}) => ({ key: ++seq, produto: '', quantidade: '', unidade: 'UN', preco: '', observacao: '', conferir: false, sugestao: null, doCatalogo: false, ...d })
 const precoTexto = (n) => (n == null || n === '' ? '' : Number(n).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 4 }))
-const ORIGEM = { texto: 'texto colado', pdf: 'PDF', imagem: 'foto', planilha: 'planilha', manual: 'digitado' }
+const ORIGEM = { texto: 'texto colado', pdf: 'PDF', imagem: 'foto', planilha: 'planilha', manual: 'digitado', link: 'pedido pelo link' }
 
 export default function OrcamentoEditar() {
   const { id } = useParams()
@@ -53,6 +54,8 @@ export default function OrcamentoEditar() {
   const [ok, setOk] = useState(copia ? 'Cópia criada: confira o cliente e salve.' : '')
   const [docBusca, setDocBusca] = useState('')
   const [noPainel, setNoPainel] = useState(false)
+
+  const travado = orc?.status === 'aprovado'
 
   // catálogo do fornecedor (para sugerir nome e último preço)
   useEffect(() => {
@@ -120,82 +123,126 @@ export default function OrcamentoEditar() {
     setColado('')
   }
 
-  const lerTexto = () => aplicarLeitura(lerItens(colado), 'texto', colado)
+  const interpretarTexto = () => {
+    if (!colado.trim()) return
+    const lidos = lerItens(colado)
+    aplicarLeitura(lidos, 'texto', colado)
+  }
 
-  const lerArq = async (file) => {
+  const processarArquivo = async (file) => {
     if (!file) return
-    setErro(''); setResumo(null)
-    if (!tipoArquivo(file)) return setErro('Formato não suportado. Envie PDF, foto (JPG/PNG), Excel ou CSV.')
-    setLendo({ etapa: 'Abrindo o arquivo...' })
+    const tipo = tipoArquivo(file)
+    if (!tipo) {
+      setResumo({ erro: true, texto: 'Envie um arquivo PDF, foto (JPG/PNG) ou planilha (Excel/CSV).' })
+      return
+    }
+    setLendo({ etapa: 'Lendo arquivo...', pct: 5 })
     try {
       const { texto, origem: org, ocr } = await lerArquivo(file, (p) => setLendo(p))
+      setLendo({ etapa: 'Identificando itens...', pct: 95 })
       const lidos = lerItens(texto)
-      aplicarLeitura(lidos, org, texto)
-      if (ocr && lidos.length) setResumo((r) => r && { ...r, texto: r.texto + ' Leitura de foto: confira nomes e quantidades.' })
-    } catch (e) {
-      setErro(e.message || 'Não consegui ler o arquivo.')
-    } finally {
       setLendo(null)
-      if (inputArquivo.current) inputArquivo.current.value = ''
+      aplicarLeitura(lidos, org, (ocr ? `[Lido por imagem: ${file.name}]\n` : `[Arquivo: ${file.name}]\n`) + texto)
+    } catch (e) {
+      console.error(e)
+      setLendo(null)
+      setResumo({ erro: true, texto: 'Não consegui ler este arquivo: ' + (e.message || 'formato não suportado') + '. Tente copiar o texto e colar na aba "Colar texto".' })
     }
   }
 
   // ------------------------------------------------------------ itens
-  const alterar = (key, campo, valor) => setItens((l) => l.map((i) => (i.key === key ? { ...i, [campo]: valor, ...(campo === 'quantidade' ? { conferir: false } : {}) } : i)))
-  const remover = (key) => setItens((l) => l.filter((i) => i.key !== key))
-  const adicionar = () => setItens((l) => [...l, novoItem()])
-  const usarSugestao = (it) => setItens((l) => l.map((i) => (i.key === it.key ? {
-    ...i, produto: it.sugestao.nome, preco: i.preco || precoTexto(it.sugestao.ultimo_preco), sugestao: null, doCatalogo: it.sugestao.ultimo_preco != null,
-  } : i)))
-  const aoSairProduto = (it) => {
-    if (!it.produto.trim() || it.doCatalogo) return
-    const achado = buscarNoCatalogo(it.produto, catalogo)
-    if (achado?.exato && !it.preco && achado.item.ultimo_preco != null) {
-      setItens((l) => l.map((i) => (i.key === it.key ? { ...i, produto: achado.item.nome, preco: precoTexto(achado.item.ultimo_preco), doCatalogo: true, sugestao: null } : i)))
-    } else if (achado && !achado.exato) {
-      setItens((l) => l.map((i) => (i.key === it.key ? { ...i, sugestao: achado.item } : i)))
-    }
+  const alterar = (key, campo, valor) => {
+    if (travado) return
+    setItens((its) => its.map((i) => (i.key === key ? { ...i, [campo]: valor } : i)))
   }
-  const formatarPreco = (it) => {
-    const n = parseNumero(it.preco)
-    if (Number.isFinite(n) && n >= 0) alterar(it.key, 'preco', precoTexto(n))
+  const remover = (key) => {
+    if (travado) return
+    setItens((its) => its.filter((i) => i.key !== key))
+  }
+  const adicionar = () => {
+    if (travado) return
+    setItens((its) => [...its, novoItem()])
   }
 
+  const aoSairProduto = (item) => {
+    if (travado) return
+    if (!item.produto.trim()) return
+    const achado = buscarNoCatalogo(item.produto, catalogo)
+    if (!achado) return
+    if (achado.exato) {
+      setItens((its) => its.map((i) => {
+        if (i.key !== item.key) return i
+        return {
+          ...i,
+          produto: achado.item.nome,
+          unidade: i.unidade !== 'UN' ? i.unidade : achado.item.unidade || 'UN',
+          preco: i.preco ? i.preco : achado.item.ultimo_preco != null ? precoTexto(achado.item.ultimo_preco) : '',
+          doCatalogo: !i.preco && achado.item.ultimo_preco != null,
+          sugestao: null,
+        }
+      }))
+    } else {
+      alterar(item.key, 'sugestao', achado.item)
+    }
+  }
+
+  const usarSugestao = (item) => {
+    if (travado) return
+    const s = item.sugestao
+    if (!s) return
+    setItens((its) => its.map((i) => (i.key === item.key ? {
+      ...i, produto: s.nome, unidade: s.unidade || i.unidade,
+      preco: s.ultimo_preco != null ? precoTexto(s.ultimo_preco) : i.preco,
+      doCatalogo: s.ultimo_preco != null, sugestao: null,
+    } : i)))
+  }
+
+  const formatarPreco = (item) => {
+    if (travado) return
+    const p = parseNumero(item.preco)
+    if (Number.isFinite(p) && p >= 0) alterar(item.key, 'preco', precoTexto(p))
+  }
+
+  // ------------------------------------------------------------ totais
   const totais = useMemo(() => {
     let sub = 0, semPreco = 0
-    for (const i of itens) {
-      if (!i.produto.trim()) continue
+    itens.forEach((i) => {
       const q = parseNumero(i.quantidade), p = parseNumero(i.preco)
       if (Number.isFinite(q) && Number.isFinite(p)) sub += Math.round(q * p * 100) / 100
-      else semPreco++
-    }
-    const desc = parseNumero(cond.desconto) || 0
-    const frete = parseNumero(cond.frete) || 0
-    return { sub, desc, frete, total: Math.max(sub - desc, 0) + frete, semPreco }
-  }, [itens, cond.desconto, cond.frete])
+      else if (i.produto.trim()) semPreco++
+    })
+    const frete = cond.frete.trim() ? parseNumero(cond.frete) : 0
+    const desc = cond.desconto.trim() ? parseNumero(cond.desconto) : 0
+    const total = Math.max(sub - (Number.isFinite(desc) ? desc : 0), 0) + (Number.isFinite(frete) ? frete : 0)
+    return { sub, semPreco, frete: Number.isFinite(frete) ? frete : 0, desc: Number.isFinite(desc) ? desc : 0, total }
+  }, [itens, cond.frete, cond.desconto])
 
-  // ------------------------------------------------------------ cliente
+  // ------------------------------------------------------------ salvar e enviar
   const buscarDoc = async () => {
-    const d = soDigitos(cliente.documento)
-    if (d.length !== 14 || !cnpjValido(d)) return
+    const limpo = soDigitos(cliente.documento)
+    if (limpo.length !== 14 || !cnpjValido(limpo)) return
     setDocBusca('buscando')
     try {
-      const r = await consultarCnpj(d)
-      setCliente((c) => ({ ...c, nome: c.nome || nomeExibicao(r), email: c.email || r.email || '', whatsapp: c.whatsapp || r.telefone || '' }))
+      const dados = await consultarCnpj(limpo)
+      const nome = nomeExibicao(dados)
+      if (nome && !cliente.nome) setCliente((c) => ({ ...c, nome }))
+      if (dados.email && !cliente.email) setCliente((c) => ({ ...c, email: dados.email }))
+      if (dados.telefone && !cliente.whatsapp) setCliente((c) => ({ ...c, whatsapp: dados.telefone }))
       setDocBusca('')
     } catch { setDocBusca('') }
   }
 
-  // ------------------------------------------------------------ salvar
   const salvar = async () => {
     setErro(''); setOk('')
+    if (travado) {
+      setErro('Orçamento aprovado não pode ser alterado. Duplique para fazer outro.')
+      return null
+    }
     const validos = itens.filter((i) => i.produto.trim())
-    if (!validos.length) { setErro('Adicione pelo menos um item.'); return null }
-    for (const [n, i] of validos.entries()) {
+    if (validos.length === 0) { setErro('Informe pelo menos um item.'); return null }
+    for (const i of validos) {
       const q = parseNumero(i.quantidade)
-      if (!Number.isFinite(q) || q <= 0) { setErro(`Informe a quantidade do item ${n + 1} (${i.produto}).`); return null }
-      const p = parseNumero(i.preco)
-      if (i.preco.trim() && (!Number.isFinite(p) || p < 0)) { setErro(`Preço inválido no item ${n + 1} (${i.produto}).`); return null }
+      if (!Number.isFinite(q) || q <= 0) { setErro(`Informe a quantidade do item "${i.produto}".`); return null }
     }
     const validade = Math.round(parseNumero(cond.validade))
     if (!Number.isFinite(validade) || validade < 1 || validade > 365) { setErro('Validade deve ser entre 1 e 365 dias.'); return null }
@@ -265,6 +312,10 @@ export default function OrcamentoEditar() {
 
   // a janela do WhatsApp/PDF precisa abrir no clique (antes do await), senão o navegador bloqueia
   const abrirDepois = async (montarUrl) => {
+    if (travado) {
+      window.open(montarUrl(orc), '_blank')
+      return
+    }
     const janela = window.open('', '_blank')
     const r = await salvar()
     if (!r) { janela?.close(); return }
@@ -276,14 +327,16 @@ export default function OrcamentoEditar() {
   const enviarWhats = () => abrirDepois((r) => linkWhatsApp(cliente.whatsapp, mensagem(r)) || `https://wa.me/?text=${encodeURIComponent(mensagem(r))}`)
   const abrirPdf = () => abrirDepois((r) => `${link(r)}?imprimir=1`)
   const copiarLink = async () => {
-    const r = await salvar(); if (!r) return
-    await registrarEnvio(r)
+    const r = travado ? orc : await salvar()
+    if (!r) return
+    if (!travado) await registrarEnvio(r)
     await copiarTexto(mensagem(r))
     setOk('Mensagem com o link copiada. É só colar no WhatsApp, Telegram ou e-mail.')
   }
   const enviarEmail = async () => {
     if (!emailValido(cliente.email)) { setErro('Informe o e-mail do cliente para enviar.'); return }
-    const r = await salvar(); if (!r) return
+    const r = travado ? orc : await salvar()
+    if (!r) return
     setSalvando(true)
     try {
       const { data: { session } } = await supabase.auth.getSession()
@@ -293,7 +346,7 @@ export default function OrcamentoEditar() {
       })
       const j = await resp.json().catch(() => ({}))
       if (!resp.ok) throw new Error(j.erro || 'Falha ao enviar o e-mail.')
-      await registrarEnvio(r)
+      if (!travado) await registrarEnvio(r)
       setOk(`Orçamento enviado para ${cliente.email}.`)
     } catch (e) { setErro(e.message) } finally { setSalvando(false) }
   }
@@ -341,81 +394,109 @@ export default function OrcamentoEditar() {
       </div>
 
       {orc?.status === 'aprovado' && (
-        <div className="alerta alerta-ok">
-          ✅ Aprovado{orc.aprovado_por ? ` por ${orc.aprovado_por}` : ''}{orc.aprovado_em ? ` em ${formatarData(orc.aprovado_em)}` : ''}.
+        <div style={{ marginBottom: 16 }}>
+          {orc.aprovacao_codigo ? (
+            <CarimboAprovacao
+              codigo={orc.aprovacao_codigo}
+              aprovadoEm={orc.aprovado_em}
+              aprovadoPor={orc.aprovado_por}
+              docTipo={orc.aprovacao_doc_tipo}
+              documento={orc.aprovacao_documento}
+              dados={orc.aprovacao_dados}
+              hash={orc.aprovacao_hash}
+            />
+          ) : (
+            <div className="alerta alerta-ok">
+              ✅ Aprovado{orc.aprovado_por ? ` por ${orc.aprovado_por}` : ''}{orc.aprovado_em ? ` em ${formatarData(orc.aprovado_em)}` : ''}.
+            </div>
+          )}
+          <div className="alerta alerta-info" style={{ marginTop: 8 }}>
+            🔒 <b>Orçamento aprovado não pode ser alterado.</b> Para modificar valores, itens ou condições, use o botão <b>Duplicar</b> acima.
+          </div>
         </div>
       )}
+
       {erro && <div className="alerta alerta-erro">{erro}</div>}
       {ok && <div className="alerta alerta-ok">{ok}</div>}
       {noPainel && <div className="alerta alerta-info">⚡ {cliente.nome || 'Este cliente'} também usa o CotaCompara: o orçamento já apareceu no painel dele, em "Propostas recebidas".</div>}
 
-      {/* ---------------- 1. entrada ---------------- */}
-      <div className="card">
-        <div className="secao-topo">
-          <h3>{importarAberto ? 'De onde veio o pedido?' : 'Pedido recebido'}</h3>
-          {!importarAberto && (
-            <div style={{ display: 'flex', gap: 8 }}>
-              {textoOriginal && <button className="btn btn-texto btn-pequeno" onClick={() => setVerOriginal(!verOriginal)}>{verOriginal ? 'Ocultar' : 'Ver'} material recebido</button>}
-              <button className="btn btn-secundario btn-pequeno" onClick={() => setImportarAberto(true)}>+ Importar mais itens</button>
-            </div>
-          )}
-        </div>
-
-        {resumo && <div className={`alerta ${resumo.erro ? 'alerta-erro' : 'alerta-info'}`} style={{ marginBottom: importarAberto ? 16 : 0 }}>{resumo.texto}</div>}
-        {!importarAberto && verOriginal && <pre className="orc-original">{textoOriginal}</pre>}
-
-        {importarAberto && (
-          <>
-            <div className="orc-modos">
-              <button className={modo === 'texto' ? 'ativo' : ''} onClick={() => setModo('texto')}>
-                <b>📋 Colar texto</b><span>WhatsApp, e-mail, lista</span>
-              </button>
-              <button className={modo === 'arquivo' ? 'ativo' : ''} onClick={() => setModo('arquivo')}>
-                <b>📎 Enviar arquivo</b><span>PDF, foto/print, Excel</span>
-              </button>
-              <button onClick={() => { setImportarAberto(false); if (!itens.length) setItens([novoItem(), novoItem(), novoItem()]) }}>
-                <b>⌨️ Digitar</b><span>começar do zero</span>
-              </button>
-            </div>
-
-            {modo === 'texto' ? (
-              <>
-                <textarea className="textarea orc-colar" value={colado} onChange={(e) => setColado(e.target.value)} autoFocus
-                  placeholder={'Cole aqui a mensagem como ela veio. Ex.:\n\nBom dia! Preciso de orçamento:\n10 cx caneta azul\n5 resmas papel A4\nLápis preto - 3 cx\nBorracha branca 20 un'} />
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginTop: 10, flexWrap: 'wrap' }}>
-                  <small className="texto-suave">Pode colar a conversa inteira: cumprimentos, datas e nomes são ignorados.</small>
-                  <button className="btn btn-primario" onClick={lerTexto} disabled={!colado.trim()}>Montar tabela</button>
-                </div>
-              </>
-            ) : (
-              <div
-                className={`orc-drop ${arrastando ? 'sobre' : ''}`}
-                onDragOver={(e) => { e.preventDefault(); setArrastando(true) }}
-                onDragLeave={() => setArrastando(false)}
-                onDrop={(e) => { e.preventDefault(); setArrastando(false); lerArq(e.dataTransfer.files?.[0]) }}
-                onClick={() => !lendo && inputArquivo.current?.click()}
-              >
-                <input ref={inputArquivo} type="file" hidden accept="application/pdf,image/*,.xlsx,.xls,.ods,.csv,.txt"
-                  onChange={(e) => lerArq(e.target.files?.[0])} />
-                {lendo ? (
-                  <div className="orc-lendo">
-                    <div className="spinner" />
-                    <div>{lendo.etapa}</div>
-                    {lendo.pct != null && <div className="orc-barra"><div style={{ width: `${lendo.pct}%` }} /></div>}
-                  </div>
-                ) : (
-                  <>
-                    <div style={{ fontSize: 34 }}>📄</div>
-                    <b>Toque para escolher ou arraste o arquivo aqui</b>
-                    <span>PDF · foto ou print (JPG/PNG) · Excel/CSV — no celular dá para tirar a foto na hora</span>
-                    <small>Tudo é lido no seu aparelho. Foto: quanto mais nítida e reta, melhor. Letra à mão não é lida.</small>
-                  </>
-                )}
+      {/* ---------------- 1. entrada (só se não travado) ---------------- */}
+      {!travado && (
+        <div className="card">
+          <div className="secao-topo">
+            <h3>{importarAberto ? 'De onde veio o pedido?' : 'Pedido recebido'}</h3>
+            {!importarAberto && (
+              <div style={{ display: 'flex', gap: 8 }}>
+                {textoOriginal && <button className="btn btn-texto btn-pequeno" onClick={() => setVerOriginal(!verOriginal)}>{verOriginal ? 'Ocultar' : 'Ver'} material recebido</button>}
+                <button className="btn btn-secundario btn-pequeno" onClick={() => setImportarAberto(true)}>+ Importar mais itens</button>
               </div>
             )}
-          </>
-        )}
-      </div>
+          </div>
+
+          {resumo && <div className={`alerta ${resumo.erro ? 'alerta-erro' : 'alerta-info'}`} style={{ marginBottom: importarAberto ? 16 : 0 }}>{resumo.texto}</div>}
+          {!importarAberto && verOriginal && <pre className="orc-original">{textoOriginal}</pre>}
+
+          {importarAberto && (
+            <>
+              <div className="orc-modos">
+                <button className={modo === 'texto' ? 'ativo' : ''} onClick={() => setModo('texto')}>
+                  💬 Colar texto (WhatsApp, e-mail...)
+                </button>
+                <button className={modo === 'arquivo' ? 'ativo' : ''} onClick={() => setModo('arquivo')}>
+                  📄 Enviar arquivo (PDF, foto, planilha...)
+                </button>
+              </div>
+
+              {modo === 'texto' ? (
+                <div>
+                  <textarea
+                    className="textarea"
+                    rows={5}
+                    placeholder="Cole aqui a mensagem do cliente. Exemplo:&#10;5 cx papel sulfite A4&#10;10 canetas azuis Bic&#10;2 grampeadores 26/6"
+                    value={colado}
+                    onChange={(e) => setColado(e.target.value)}
+                  />
+                  <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                    <button className="btn btn-primario" onClick={interpretarTexto} disabled={!colado.trim()}>
+                      Identificar itens
+                    </button>
+                    {itens.length > 0 && (
+                      <button className="btn btn-texto" onClick={() => setImportarAberto(false)}>
+                        Cancelar
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div
+                  className={`orc-dropzone ${arrastando ? 'arrastando' : ''}`}
+                  onDragOver={(e) => { e.preventDefault(); setArrastando(true) }}
+                  onDragLeave={() => setArrastando(false)}
+                  onDrop={(e) => { e.preventDefault(); setArrastando(false); processarArquivo(e.dataTransfer.files[0]) }}
+                  onClick={() => inputArquivo.current?.click()}
+                >
+                  <input ref={inputArquivo} type="file" style={{ display: 'none' }} accept=".pdf,.png,.jpg,.jpeg,.xlsx,.xls,.csv"
+                    onChange={(e) => processarArquivo(e.target.files[0])} />
+                  {lendo ? (
+                    <div className="orc-lendo">
+                      <div className="spinner" />
+                      <div>{lendo.etapa}</div>
+                      {lendo.pct != null && <div className="orc-barra"><div style={{ width: `${lendo.pct}%` }} /></div>}
+                    </div>
+                  ) : (
+                    <>
+                      <div style={{ fontSize: 34 }}>📄</div>
+                      <b>Toque para escolher ou arraste o arquivo aqui</b>
+                      <span>PDF · foto ou print (JPG/PNG) · Excel/CSV — no celular dá para tirar a foto na hora</span>
+                      <small>Tudo é lido no seu aparelho. Foto: quanto mais nítida e reta, melhor. Letra à mão não é lida.</small>
+                    </>
+                  )}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
 
       {/* ---------------- 2. itens ---------------- */}
       {(itens.length > 0 || !importarAberto) && (
@@ -437,8 +518,8 @@ export default function OrcamentoEditar() {
                 <span className="n">{idx + 1}</span>
                 <div className="c-prod">
                   <input className="input" value={i.produto} placeholder="Produto" onChange={(e) => alterar(i.key, 'produto', e.target.value)}
-                    onBlur={() => aoSairProduto(i)} />
-                  {i.sugestao && (
+                    onBlur={() => aoSairProduto(i)} disabled={travado} />
+                  {!travado && i.sugestao && (
                     <div className="orc-sugestao">
                       Você já orçou: <b>{i.sugestao.nome}</b>{i.sugestao.ultimo_preco != null && <> por {formatarMoeda(i.sugestao.ultimo_preco)}</>}
                       <button onClick={() => usarSugestao(i)}>usar</button>
@@ -449,10 +530,10 @@ export default function OrcamentoEditar() {
                 </div>
                 <div className="c-qtd">
                   <input className="input qtd" inputMode="decimal" value={i.quantidade} placeholder={i.conferir ? 'conferir' : 'Qtd'}
-                    onChange={(e) => alterar(i.key, 'quantidade', e.target.value)} />
+                    onChange={(e) => alterar(i.key, 'quantidade', e.target.value)} disabled={travado} />
                 </div>
                 <div className="c-un">
-                  <select className="select" value={i.unidade} onChange={(e) => alterar(i.key, 'unidade', e.target.value)}>
+                  <select className="select" value={i.unidade} onChange={(e) => alterar(i.key, 'unidade', e.target.value)} disabled={travado}>
                     {!UNIDADES.includes(i.unidade) && <option value={i.unidade}>{i.unidade}</option>}
                     {UNIDADES.map((u) => <option key={u} value={u}>{u}</option>)}
                   </select>
@@ -460,19 +541,22 @@ export default function OrcamentoEditar() {
                 <div className="c-preco">
                   <input className="input qtd" inputMode="decimal" value={i.preco} placeholder="0,00"
                     onChange={(e) => alterar(i.key, 'preco', e.target.value)} onBlur={() => formatarPreco(i)}
+                    disabled={travado}
                     onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); const prox = e.currentTarget.closest('.orc-linha')?.nextElementSibling?.querySelector('.c-preco input'); prox?.focus() } }} />
                 </div>
                 <div className="c-sub">{sub == null ? '—' : formatarMoeda(sub)}</div>
                 <div className="c-rm">
-                  <button className="btn-icone perigo" title="Remover" onClick={() => remover(i.key)}><IconeLixo /></button>
+                  {!travado && <button className="btn-icone perigo" title="Remover" onClick={() => remover(i.key)}><IconeLixo /></button>}
                 </div>
               </div>
             )
           })}
-          <div className="itens-rodape">
-            <button className="btn btn-texto" onClick={adicionar}>+ Adicionar item</button>
-            <span className="texto-suave" style={{ alignSelf: 'center', fontSize: 13 }}>Dica: Enter no preço pula para o próximo item.</span>
-          </div>
+          {!travado && (
+            <div className="itens-rodape">
+              <button className="btn btn-texto" onClick={adicionar}>+ Adicionar item</button>
+              <span className="texto-suave" style={{ alignSelf: 'center', fontSize: 13 }}>Dica: Enter no preço pula para o próximo item.</span>
+            </div>
+          )}
 
           <div className="orc-totais">
             <div><span>Subtotal</span><b>{formatarMoeda(totais.sub)}</b></div>
@@ -490,31 +574,51 @@ export default function OrcamentoEditar() {
             <h3 style={{ marginBottom: 12 }}>Para quem é</h3>
             <div className="campo">
               <label>Cliente (empresa, escola, instituição...)</label>
-              <input className="input" value={cliente.nome} onChange={(e) => setCliente({ ...cliente, nome: e.target.value })} placeholder="Ex.: Escola Municipal Monteiro Lobato" />
+              <input className="input" value={cliente.nome} onChange={(e) => setCliente({ ...cliente, nome: e.target.value })} placeholder="Ex.: Escola Municipal Monteiro Lobato" disabled={travado} />
             </div>
             <div className="linha-campos">
               <div className="campo">
                 <label>CNPJ ou CPF <small>(opcional)</small></label>
                 <input className="input" value={cliente.documento} inputMode="numeric"
-                  onChange={(e) => { const d = soDigitos(e.target.value); setCliente({ ...cliente, documento: d.length > 11 ? mascaraCnpj(d) : e.target.value }) }}
-                  onBlur={buscarDoc} placeholder="busca o nome pelo CNPJ" />
+                  onChange={(e) => { const d = soDigitos(e.target.value); setCliente({ ...cliente, documento: d.length > 11 ? mascaraCnpj(d) : mascaraCpf(d) }) }}
+                  onBlur={buscarDoc} placeholder="busca o nome pelo CNPJ" disabled={travado} />
                 {docBusca === 'buscando' && <small>Consultando CNPJ...</small>}
               </div>
               <div className="campo">
                 <label>Referência <small>(opcional)</small></label>
-                <input className="input" value={cliente.referencia} onChange={(e) => setCliente({ ...cliente, referencia: e.target.value })} placeholder="Ex.: Pedido 123 / Material 2º semestre" />
+                <input className="input" value={cliente.referencia} onChange={(e) => setCliente({ ...cliente, referencia: e.target.value })} placeholder="Ex.: Pedido 123 / Material 2º semestre" disabled={travado} />
               </div>
             </div>
             <div className="linha-campos">
               <div className="campo">
                 <label>WhatsApp do cliente</label>
-                <input className="input" value={cliente.whatsapp} inputMode="tel" onChange={(e) => setCliente({ ...cliente, whatsapp: e.target.value })} placeholder="(19) 99999-0000" />
+                <input className="input" value={cliente.whatsapp} inputMode="tel" onChange={(e) => setCliente({ ...cliente, whatsapp: e.target.value })} placeholder="(19) 99999-0000" disabled={travado} />
               </div>
               <div className="campo">
                 <label>E-mail do cliente</label>
-                <input className="input" value={cliente.email} inputMode="email" onChange={(e) => setCliente({ ...cliente, email: e.target.value })} placeholder="compras@cliente.com.br" />
+                <input className="input" value={cliente.email} inputMode="email" onChange={(e) => setCliente({ ...cliente, email: e.target.value })} placeholder="compras@cliente.com.br" disabled={travado} />
               </div>
             </div>
+
+            {orc?.aprovacao_dados && (
+              <div className="dados-consulta-cnpj card-compacto" style={{ marginTop: 12 }}>
+                <span className="texto-suave" style={{ fontSize: 12, fontWeight: 600 }}>Dados registrados na aprovação:</span>
+                <div className="grid-cnpj-compacto" style={{ marginTop: 6 }}>
+                  {orc.aprovacao_dados.razao_social && (
+                    <div><span className="cnpj-rotulo">Razão Social:</span> <span className="cnpj-valor">{orc.aprovacao_dados.razao_social}</span></div>
+                  )}
+                  {orc.aprovacao_dados.nome_fantasia && (
+                    <div><span className="cnpj-rotulo">Nome Fantasia:</span> <span className="cnpj-valor">{orc.aprovacao_dados.nome_fantasia}</span></div>
+                  )}
+                  {(orc.aprovacao_dados.cidade || orc.aprovacao_dados.uf) && (
+                    <div><span className="cnpj-rotulo">Local:</span> <span className="cnpj-valor">{[orc.aprovacao_dados.cidade, orc.aprovacao_dados.uf].filter(Boolean).join(' / ')}</span></div>
+                  )}
+                  {orc.aprovacao_documento && (
+                    <div><span className="cnpj-rotulo">{orc.aprovacao_doc_tipo || 'Doc'}:</span> <span className="cnpj-valor mono">{orc.aprovacao_doc_tipo === 'CNPJ' ? mascaraCnpj(orc.aprovacao_documento) : mascaraCpf(orc.aprovacao_documento)}</span></div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="card">
@@ -522,32 +626,34 @@ export default function OrcamentoEditar() {
             <div className="linha-campos">
               <div className="campo">
                 <label>Validade (dias)</label>
-                <input className="input" inputMode="numeric" value={cond.validade} onChange={(e) => setCond({ ...cond, validade: e.target.value })} />
+                <input className="input" inputMode="numeric" value={cond.validade} onChange={(e) => setCond({ ...cond, validade: e.target.value })} disabled={travado} />
               </div>
               <div className="campo">
                 <label>Prazo de entrega</label>
-                <input className="input" value={cond.prazo} onChange={(e) => setCond({ ...cond, prazo: e.target.value })} placeholder="Ex.: 2 dias úteis" />
+                <input className="input" value={cond.prazo} onChange={(e) => setCond({ ...cond, prazo: e.target.value })} placeholder="Ex.: 2 dias úteis" disabled={travado} />
               </div>
             </div>
             <div className="campo">
               <label>Pagamento</label>
-              <input className="input" value={cond.pagamento} onChange={(e) => setCond({ ...cond, pagamento: e.target.value })} placeholder="Ex.: Pix à vista ou boleto 28 dias" />
+              <input className="input" value={cond.pagamento} onChange={(e) => setCond({ ...cond, pagamento: e.target.value })} placeholder="Ex.: Pix à vista ou boleto 28 dias" disabled={travado} />
             </div>
             <div className="linha-campos">
               <div className="campo">
                 <label>Frete (R$) <small>0 = grátis</small></label>
-                <input className="input" inputMode="decimal" value={cond.frete} onChange={(e) => setCond({ ...cond, frete: e.target.value })} placeholder="deixe vazio se não tiver" />
+                <input className="input" inputMode="decimal" value={cond.frete} onChange={(e) => setCond({ ...cond, frete: e.target.value })} placeholder="deixe vazio se não tiver" disabled={travado} />
               </div>
               <div className="campo">
                 <label>Desconto (R$)</label>
-                <input className="input" inputMode="decimal" value={cond.desconto} onChange={(e) => setCond({ ...cond, desconto: e.target.value })} placeholder="0,00" />
+                <input className="input" inputMode="decimal" value={cond.desconto} onChange={(e) => setCond({ ...cond, desconto: e.target.value })} placeholder="0,00" disabled={travado} />
               </div>
             </div>
             <div className="campo">
               <label>Observações</label>
-              <textarea className="textarea" style={{ minHeight: 60 }} value={cond.obs} onChange={(e) => setCond({ ...cond, obs: e.target.value })} placeholder="Ex.: marcas equivalentes, entrega no endereço da escola..." />
+              <textarea className="textarea" style={{ minHeight: 60 }} value={cond.obs} onChange={(e) => setCond({ ...cond, obs: e.target.value })} placeholder="Ex.: marcas equivalentes, entrega no endereço da escola..." disabled={travado} />
             </div>
-            <label className="orc-check"><input type="checkbox" checked={salvarPadrao} onChange={(e) => setSalvarPadrao(e.target.checked)} /> Usar estas condições nos próximos orçamentos</label>
+            {!travado && (
+              <label className="orc-check"><input type="checkbox" checked={salvarPadrao} onChange={(e) => setSalvarPadrao(e.target.checked)} /> Usar estas condições nos próximos orçamentos</label>
+            )}
           </div>
         </div>
       )}
@@ -560,7 +666,12 @@ export default function OrcamentoEditar() {
             <b>{formatarMoeda(totais.total)}</b>
           </div>
           <div className="orc-acoes-botoes">
-            <button className="btn btn-secundario" onClick={salvar} disabled={salvando}>{salvando ? 'Salvando...' : 'Salvar'}</button>
+            {!travado && (
+              <button className="btn btn-secundario" onClick={salvar} disabled={salvando}>{salvando ? 'Salvando...' : 'Salvar'}</button>
+            )}
+            {travado && (
+              <button className="btn btn-primario" onClick={duplicar}>Duplicar orçamento</button>
+            )}
             <button className="btn btn-secundario" onClick={abrirPdf} disabled={salvando}>Ver / PDF</button>
             <button className="btn btn-secundario" onClick={copiarLink} disabled={salvando} title="Copiar mensagem com link"><IconeLink /> Link</button>
             <button className="btn btn-secundario" onClick={enviarEmail} disabled={salvando} title="Enviar por e-mail"><IconeEmail /> E-mail</button>
@@ -568,7 +679,7 @@ export default function OrcamentoEditar() {
           </div>
         </div>
       )}
-      {orc && origem !== 'manual' && <p className="texto-suave" style={{ fontSize: 12, textAlign: 'center' }}>Itens importados de {ORIGEM[origem]}.</p>}
+      {orc && origem !== 'manual' && <p className="texto-suave" style={{ fontSize: 12, textAlign: 'center' }}>Itens importados de {ORIGEM[origem] || origem}.</p>}
     </>
   )
 }
