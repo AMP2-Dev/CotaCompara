@@ -85,9 +85,18 @@ export default function OrcamentoEditar() {
       setResumo({ erro: true, texto: 'Não encontrei itens nesse material. Confira se a lista está legível — ou digite os itens abaixo.' })
       return
     }
-    let comPreco = 0
+    let comPreco = 0, precoDoTexto = 0
     const novos = lidos.map((l) => {
       const achado = buscarNoCatalogo(l.produto, catalogo)
+      // preço que veio escrito no próprio pedido tem prioridade sobre o catálogo
+      if (l.preco != null) {
+        precoDoTexto++
+        return novoItem({
+          produto: achado?.exato ? achado.item.nome : l.produto, quantidade: formatarQtd(l.quantidade),
+          unidade: l.unidade !== 'UN' ? l.unidade : (achado?.exato && achado.item.unidade) || 'UN',
+          preco: precoTexto(l.preco), conferir: l.conferir, sugestao: achado && !achado.exato ? achado.item : null,
+        })
+      }
       if (achado?.exato) {
         if (achado.item.ultimo_preco != null) comPreco++
         return novoItem({
@@ -104,6 +113,7 @@ export default function OrcamentoEditar() {
     setResumo({
       texto: `Encontrei ${lidos.length} ${lidos.length === 1 ? 'item' : 'itens'}` +
         (conferir ? ` · ${conferir} sem quantidade (marquei em amarelo para conferir)` : '') +
+        (precoDoTexto ? ` · ${precoDoTexto} com o preço que veio no texto` : '') +
         (comPreco ? ` · ${comPreco} já com o preço do seu último orçamento` : '') + '.',
     })
     setImportarAberto(false)
@@ -306,7 +316,7 @@ export default function OrcamentoEditar() {
 
   return (
     <>
-      <Link to="/orcamentos" className="voltar"><IconeVoltar /> Orçamentos</Link>
+      <Link to="/orcamentos" className="voltar"><IconeVoltar /> Clientes</Link>
 
       <div className="titulo-pagina">
         <div>

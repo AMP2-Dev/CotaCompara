@@ -61,8 +61,8 @@ export default function Orcamentos() {
     <>
       <div className="titulo-pagina">
         <div>
-          <h1>Orçamentos</h1>
-          <div className="subtitulo">Recebeu um pedido por WhatsApp, PDF ou foto? Responda em minutos.</div>
+          <h1>Clientes</h1>
+          <div className="subtitulo">Orçamentos que você envia aos seus clientes. Recebeu um pedido por WhatsApp, PDF ou foto? Responda em minutos.</div>
         </div>
         <Link to="/orcamentos/novo" className="btn btn-primario">+ Novo orçamento</Link>
       </div>

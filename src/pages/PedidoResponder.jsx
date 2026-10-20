@@ -109,7 +109,7 @@ export default function PedidoResponder() {
 
   if (erro) return (
     <>
-      <Link to="/orcamentos" className="voltar"><IconeVoltar /> Orçamentos</Link>
+      <Link to="/orcamentos" className="voltar"><IconeVoltar /> Clientes</Link>
       <div className="card"><div className="alerta alerta-erro" style={{ margin: 0 }}>{erro}</div></div>
     </>
   )
@@ -121,7 +121,7 @@ export default function PedidoResponder() {
 
   return (
     <>
-      <Link to="/orcamentos" className="voltar"><IconeVoltar /> Orçamentos</Link>
+      <Link to="/orcamentos" className="voltar"><IconeVoltar /> Clientes</Link>
       <div className="titulo-pagina">
         <div>
           <h1>Pedido de {comp.nome}</h1>
@@ -200,7 +200,7 @@ export default function PedidoResponder() {
           </div>
         </div>
       )}
-      {enviado && <div style={{ textAlign: 'center', marginTop: 12 }}><Link to="/orcamentos" className="btn btn-secundario">Voltar para Orçamentos</Link></div>}
+      {enviado && <div style={{ textAlign: 'center', marginTop: 12 }}><Link to="/orcamentos" className="btn btn-secundario">Voltar para Clientes</Link></div>}
     </>
   )
 }

@@ -43,7 +43,7 @@ export default function Cotacoes() {
       <div className="titulo-pagina">
         <div>
           <h1>Cotações</h1>
-          <div className="subtitulo">Monte, envie e acompanhe as respostas.</div>
+          <div className="subtitulo">Peça preços aos seus fornecedores, compare e escolha o melhor.</div>
         </div>
         <Link to="/cotacoes/nova" className="btn btn-primario">+ Nova cotação</Link>
       </div>

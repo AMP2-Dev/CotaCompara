@@ -95,6 +95,49 @@ const QTD_PARENT = new RegExp(`\\(\\s*${NUM}\\s*(${RX_UN})?\\.?\\s*\\)`, 'i')
 const QTD_INICIO = new RegExp(`^${NUM}\\s*(${RX_UN})?\\.?(?:\\s*(?:x|×|de|-|–|:)\\s*|\\s+)(.+)$`, 'i')
 const QTD_FIM = new RegExp(`^(.+?)(\\s*(?:[-–:=x×]|\\.{2,})\\s*|\\s+)${NUM}(\\s*)(${RX_UN})?\\.?$`, 'i')
 
+// ---------------------------------------------------------------- preço
+// "R$ 2,50", "2,50", "1.250,00", "x 2.50", "@ 3,90 cada" — o número com 2 casas
+// decimais no fim da linha é preço; se vier em dupla (2,50 25,00) o 2º é o total.
+const MOEDA = '(\\d{1,3}(?:\\.\\d{3})+,\\d{2}|\\d+,\\d{2})'
+const RX_RS = /(?:(?:pre[cç]o|valor|vlr|unit[aá]rio|unit|p\.?\s*unit)\.?\s*[:=]?\s*)?R\$\s*(\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?|\d+(?:[.,]\d{1,2})?)(?:\s*(?:cada|\/\s*[a-zç]{1,6}\.?|unit[aá]rio))?/gi
+const RX_PRECO_FIM = new RegExp(`(?:^|\\s)(?:(?:[x×@=:]|-|–|a|por|pre[cç]o|valor|vlr|unit\\.?|unit[aá]rio)\\s*)?${MOEDA}(?:\\s*(?:cada|\\/\\s*[a-zç]{1,6}\\.?|unit[aá]rio))?\\s*$`, 'i')
+const RX_PRECO_PONTO = /(?:^|\s)(?:[x×@=]|a|por|pre[cç]o|valor|vlr)\s*(\d+\.\d{2})(?:\s*(?:cada|\/\s*[a-zç]{1,6}\.?))?\s*$/i
+const RX_SOBRA = /(?:[\s\-–:=x×@*]+|\s+(?:a|por|cada|de|pre[cç]o|valor|vlr|unit\.?|unit[aá]rio))$/i
+
+function aparar(s) {
+  let t = s, ant
+  do { ant = t; t = t.replace(RX_SOBRA, '') } while (t !== ant && t)
+  return t.trim()
+}
+
+/** Separa o preço do resto da linha. Retorna { resto, preco } (preco null se não achou). */
+export function separarPreco(linha) {
+  let s = String(linha || '')
+  const rs = [...s.matchAll(RX_RS)]
+  if (rs.length) {
+    const preco = numero(rs[0][1])
+    s = s.replace(RX_RS, ' ').replace(/\s+/g, ' ')
+    return { resto: aparar(s), preco: Number.isFinite(preco) ? preco : null }
+  }
+  let m = s.match(RX_PRECO_FIM)
+  if (m && /[A-Za-zÀ-ÿ]{2,}/.test(s.slice(0, m.index))) {
+    let preco = numero(m[1])
+    let resto = aparar(s.slice(0, m.index))
+    // dupla "2,50 25,00": o da esquerda é o unitário
+    const m2 = resto.match(RX_PRECO_FIM)
+    if (m2 && /[A-Za-zÀ-ÿ]{2,}/.test(resto.slice(0, m2.index))) {
+      preco = numero(m2[1])
+      resto = aparar(resto.slice(0, m2.index))
+    }
+    return { resto, preco }
+  }
+  m = s.match(RX_PRECO_PONTO)
+  if (m && /[A-Za-zÀ-ÿ]{2,}/.test(s.slice(0, m.index))) {
+    return { resto: aparar(s.slice(0, m.index)), preco: Number(m[1]) }
+  }
+  return { resto: s, preco: null }
+}
+
 /**
  * Lê uma linha de texto livre. Retorna null se não parece um item.
  */
@@ -103,8 +146,12 @@ export function lerLinha(linhaOriginal, contexto = {}) {
   if (!s || s.length < 2) return null
   if (SO_NUMERO.test(s)) return null
   if (!/[A-Za-zÀ-ÿ]{2,}/.test(s)) return null
-  if (/R\$\s*\d/.test(s)) return null // linha de preço/total
-  if (CONVERSA.test(s) && !/^\d/.test(s)) return null
+  if (CONVERSA.test(s) && !/^\d/.test(s)) return null // inclui "Total R$ ...", "Valor total"
+
+  const { resto: semPreco, preco } = separarPreco(s)
+  s = semPreco
+  if (!s || !/[A-Za-zÀ-ÿ]{2,}/.test(s)) return null
+  if (preco != null && /^(frete|desconto|taxa|soma|sub-?total|total|valor)\b/i.test(s)) return null
 
   let enumerado = false
   const en = s.match(RX_ENUM)
@@ -164,6 +211,7 @@ export function lerLinha(linhaOriginal, contexto = {}) {
     quantidade: temQtd ? qtd : 1,
     unidade: un || 'UN',
     conferir: !temQtd,
+    ...(preco != null && preco > 0 ? { preco } : {}),
   }
 }
 
@@ -171,6 +219,8 @@ export function lerLinha(linhaOriginal, contexto = {}) {
 const CAB_PROD = /produto|descri|item|material|especifica|mercadoria/i
 const CAB_QTD = /^(qtd|qtde|quant|quantidade|qde|qt)\b/i
 const CAB_UN = /^(un|und|unid|unidade|medida|u\.?m\.?)\b/i
+const CAB_PRECO = /pre[cç]o|unit|vlr\.?\s*un|valor\s*un/i
+const CAB_TOTAL = /total/i
 
 function dividirCelulas(l) {
   if (l.includes('\t')) return l.split('\t')
@@ -191,12 +241,14 @@ function lerTabela(linhas) {
         p: (() => { const i = cells.findIndex((c) => /produto|descri|material|especifica|mercadoria/i.test(c)); return i >= 0 ? i : cells.findIndex((c) => CAB_PROD.test(c)) })(),
         q: cells.findIndex((c) => CAB_QTD.test(c)),
         u: cells.findIndex((c) => CAB_UN.test(c)),
+        v: (() => { const i = cells.findIndex((c) => CAB_PRECO.test(c) && !CAB_TOTAL.test(c)); return i >= 0 ? i : cells.findIndex((c) => /^(valor|pre[cç]o)$/i.test(c)) })(),
       }
       continue
     }
-    let produto, qtd, un
+    let produto, qtd, un, preco = NaN
     if (col) {
       produto = cells[col.p]; qtd = numero(cells[col.q]); un = col.u >= 0 ? cells[col.u] : null
+      if (col.v >= 0) preco = numero(String(cells[col.v] || '').replace(/R\$\s*/i, ''))
     } else {
       // sem cabeçalho: produto = maior célula com letras; qtd = 1º número; unidade = célula que é unidade
       const comLetras = cells.map((c, i) => [c, i]).filter(([c]) => /[A-Za-zÀ-ÿ]{2,}/.test(c) && !normalizarUnidade(c))
@@ -208,11 +260,19 @@ function lerTabela(linhas) {
       const depois = nums.filter(([, i]) => i > ip)
       qtd = numero((depois[0] || nums[nums.length - 1] || [])[0])
       un = (cells.find((c) => normalizarUnidade(c)) || null)
+      // depois da quantidade, a 1ª célula com cara de dinheiro (2,50 ou R$ 2,50) é o preço
+      const din = cells.map((c, i) => [c.replace(/R\$\s*/i, ''), i])
+        .filter(([c, i]) => i > ip && i !== (depois[0] || [])[1] && /^(\d{1,3}(\.\d{3})+|\d+)[.,]\d{2}$/.test(c))
+      if (din.length) preco = numero(din[0][0])
     }
     if (!produto || !/[A-Za-zÀ-ÿ]{2,}/.test(produto) || CONVERSA.test(produto) && !Number.isFinite(qtd)) continue
     if (/^(total|subtotal|valor)/i.test(produto)) continue
     const temQtd = Number.isFinite(qtd) && qtd > 0
-    itens.push({ produto: arrumarProduto(produto), quantidade: temQtd ? qtd : 1, unidade: normalizarUnidade(un) || (un ? String(un).toUpperCase().slice(0, 6) : 'UN'), conferir: !temQtd })
+    itens.push({
+      produto: arrumarProduto(produto), quantidade: temQtd ? qtd : 1,
+      unidade: normalizarUnidade(un) || (un ? String(un).toUpperCase().slice(0, 6) : 'UN'), conferir: !temQtd,
+      ...(Number.isFinite(preco) && preco > 0 ? { preco } : {}),
+    })
   }
   return itens
 }

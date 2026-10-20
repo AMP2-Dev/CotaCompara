@@ -115,7 +115,7 @@ torna `suporte@amp.ia.br` administrador — troque o e-mail se precisar.
 
 **SQL:** rode `supabase/06_orcamento_rapido.sql` (depois do 01 ao 05).
 
-- Menu **Orçamentos**: o fornecedor cola a mensagem do WhatsApp, envia PDF, foto/print ou Excel/CSV
+- Menu **Clientes** (orçamentos): o fornecedor cola a mensagem do WhatsApp, envia PDF, foto/print ou Excel/CSV
   e o sistema monta a **tabela editável** (produto, quantidade, unidade). Tudo lido **no navegador, sem custo**:
   texto e planilha por regras próprias, PDF com pdf.js, foto e PDF escaneado com Tesseract.js (OCR em português).
 - **Catálogo do fornecedor**: cada orçamento enviado ensina o sistema; no próximo, o nome certo e o
@@ -132,7 +132,7 @@ torna `suporte@amp.ia.br` administrador — troque o e-mail se precisar.
 **SQL:** rode `supabase/07_integracao_usuarios.sql` (depois do 06).
 
 - Ao disparar a cotação, o sistema confere a base: se o fornecedor já usa o CotaCompara (mesmo **CNPJ** ou
-  **e-mail** da conta/de contato), o pedido **cai direto no painel dele** (Orçamentos › Pedidos recebidos e
+  **e-mail** da conta/de contato), o pedido **cai direto no painel dele** (Clientes › Pedidos recebidos e
   aviso no Painel), com os preços do catálogo dele já preenchidos. Ele responde ali e a resposta entra no mapa
   do comprador como sempre. Quem não é usuário continua recebendo só pelo e-mail/link.
 - O e-mail continua saindo para todos; para quem é usuário ele avisa "este pedido já está no seu painel".
