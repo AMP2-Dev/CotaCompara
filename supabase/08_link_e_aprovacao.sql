@@ -6,7 +6,12 @@
 -- Só mexe no schema "cotacompara".
 -- =====================================================================
 
-create extension if not exists pgcrypto with schema extensions;
+do $$
+begin
+  create extension if not exists pgcrypto with schema extensions;
+exception when others then
+  null; -- caso pgcrypto já exista em public ou extensions
+end $$;
 
 -- ---------------------------------------------------------------------
 -- 1. Alterações em tabelas existentes
@@ -111,7 +116,7 @@ end $$;
 
 -- Gera código PREFIXO-XXXX-XXXX usando alfabeto legível de 32 chars (sem 0, O, 1, I, L)
 create or replace function cotacompara.codigo_curto(prefixo text)
-returns text language plpgsql security definer set search_path = cotacompara, public as $$
+returns text language plpgsql security definer set search_path = cotacompara, extensions, public as $$
 declare
   v_alfabeto text := '23456789ABCDEFGHJKMNPQRSTUVWXYZ';
   v_len int := length(v_alfabeto);
@@ -128,7 +133,7 @@ begin
       raise exception 'FALHA_GERAR_CODIGO';
     end if;
 
-    v_bytes := extensions.gen_random_bytes(8);
+    v_bytes := gen_random_bytes(8);
     v_p1 := substr(v_alfabeto, (get_byte(v_bytes, 0) % v_len) + 1, 1) ||
             substr(v_alfabeto, (get_byte(v_bytes, 1) % v_len) + 1, 1) ||
             substr(v_alfabeto, (get_byte(v_bytes, 2) % v_len) + 1, 1) ||
@@ -290,9 +295,9 @@ begin
 end $$;
 
 create or replace function cotacompara.hash_orcamento(p_id uuid)
-returns text language plpgsql security definer set search_path = cotacompara, public as $$
+returns text language plpgsql security definer set search_path = cotacompara, extensions, public as $$
 begin
-  return encode(extensions.digest(cotacompara.conteudo_orcamento(p_id), 'sha256'), 'hex');
+  return encode(digest(cotacompara.conteudo_orcamento(p_id), 'sha256'), 'hex');
 end $$;
 
 -- ---------------------------------------------------------------------
