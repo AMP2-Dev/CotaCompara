@@ -55,13 +55,30 @@ export default function OrcamentoEditar() {
   const [docBusca, setDocBusca] = useState('')
   const [noPainel, setNoPainel] = useState(false)
 
+  // Envio de E-mail
+  const [modalEmailAberto, setModalEmailAberto] = useState(false)
+  const [emailDestinatario, setEmailDestinatario] = useState('')
+  const [salvarNoCadastro, setSalvarNoCadastro] = useState(true)
+  const [enviandoEmail, setEnviandoEmail] = useState(false)
+  const [salvandoContato, setSalvandoContato] = useState(false)
+
   const travado = orc?.status === 'aprovado'
 
-  // catálogo do fornecedor (para sugerir nome e último preço)
+  // catálogo do fornecedor (para sugerir nome e último preço - só quando não travado)
   useEffect(() => {
-    supabase.from('catalogo_produtos').select('id, nome, chave, unidade, ultimo_preco, vezes').order('vezes', { ascending: false }).limit(3000)
-      .then(({ data }) => setCatalogo(data || []))
-  }, [])
+    if (travado) return
+    let ativo = true
+    const carregar = async () => {
+      const { data } = await supabase
+        .from('catalogo_produtos')
+        .select('id, nome, chave, unidade, ultimo_preco, vezes')
+        .order('vezes', { ascending: false })
+        .limit(1000)
+      if (ativo && data) setCatalogo(data)
+    }
+    carregar()
+    return () => { ativo = false }
+  }, [travado])
 
   useEffect(() => {
     if (!id) return
@@ -136,17 +153,16 @@ export default function OrcamentoEditar() {
       setResumo({ erro: true, texto: 'Envie um arquivo PDF, foto (JPG/PNG) ou planilha (Excel/CSV).' })
       return
     }
-    setLendo({ etapa: 'Lendo arquivo...', pct: 5 })
+    setLendo({ etapa: 'Abrindo o arquivo...' })
     try {
-      const { texto, origem: org, ocr } = await lerArquivo(file, (p) => setLendo(p))
-      setLendo({ etapa: 'Identificando itens...', pct: 95 })
-      const lidos = lerItens(texto)
-      setLendo(null)
-      aplicarLeitura(lidos, org, (ocr ? `[Lido por imagem: ${file.name}]\n` : `[Arquivo: ${file.name}]\n`) + texto)
+      const res = await lerArquivo(file, (p) => setLendo(p))
+      const lidos = lerItens(res.texto)
+      aplicarLeitura(lidos, res.origem, res.texto)
     } catch (e) {
-      console.error(e)
+      setResumo({ erro: true, texto: e.message || 'Não consegui ler o arquivo. Tente colar o texto ou digitar.' })
+    } finally {
       setLendo(null)
-      setResumo({ erro: true, texto: 'Não consegui ler este arquivo: ' + (e.message || 'formato não suportado') + '. Tente copiar o texto e colar na aba "Colar texto".' })
+      if (inputArquivo.current) inputArquivo.current.value = ''
     }
   }
 
@@ -295,6 +311,25 @@ export default function OrcamentoEditar() {
     return registro
   }
 
+  const salvarContato = async () => {
+    if (!orc) return
+    setSalvandoContato(true)
+    setErro('')
+    setOk('')
+    const { data, error } = await supabase.from('orcamentos').update({
+      cliente_email: cliente.email.trim() || null,
+      cliente_whatsapp: cliente.whatsapp.trim() || null,
+      referencia: cliente.referencia.trim() || null,
+    }).eq('id', orc.id).select().single()
+    setSalvandoContato(false)
+    if (error) {
+      setErro(mensagemErro(error))
+    } else {
+      setOrc(data)
+      setOk('Dados de contato atualizados com sucesso.')
+    }
+  }
+
   const link = (r) => `${APP_URL}/o/${r.token}`
 
   const registrarEnvio = async (r) => {
@@ -333,22 +368,48 @@ export default function OrcamentoEditar() {
     await copiarTexto(mensagem(r))
     setOk('Mensagem com o link copiada. É só colar no WhatsApp, Telegram ou e-mail.')
   }
-  const enviarEmail = async () => {
-    if (!emailValido(cliente.email)) { setErro('Informe o e-mail do cliente para enviar.'); return }
-    const r = travado ? orc : await salvar()
-    if (!r) return
-    setSalvando(true)
+
+  const abrirModalEmail = () => {
+    setEmailDestinatario(cliente.email || '')
+    setModalEmailAberto(true)
+  }
+
+  const confirmarEnvioEmail = async () => {
+    const destino = emailDestinatario.trim()
+    if (!emailValido(destino)) {
+      setErro('Informe um e-mail válido para envio.')
+      return
+    }
+    setErro('')
+    setOk('')
+    setEnviandoEmail(true)
     try {
+      const r = travado ? orc : await salvar()
+      if (!r) { setEnviandoEmail(false); return }
       const { data: { session } } = await supabase.auth.getSession()
       const resp = await fetch('/api/enviar-orcamento', {
-        method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
-        body: JSON.stringify({ orcamento_id: r.id }),
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
+        body: JSON.stringify({
+          orcamento_id: r.id,
+          email_destinatario: destino,
+          atualizar_cadastro: salvarNoCadastro,
+        }),
       })
       const j = await resp.json().catch(() => ({}))
       if (!resp.ok) throw new Error(j.erro || 'Falha ao enviar o e-mail.')
       if (!travado) await registrarEnvio(r)
-      setOk(`Orçamento enviado para ${cliente.email}.`)
-    } catch (e) { setErro(e.message) } finally { setSalvando(false) }
+      if (salvarNoCadastro) {
+        setCliente((c) => ({ ...c, email: destino }))
+        if (orc) setOrc((o) => ({ ...o, cliente_email: destino }))
+      }
+      setModalEmailAberto(false)
+      setOk(`Orçamento enviado com sucesso para ${destino}.`)
+    } catch (e) {
+      setErro(e.message)
+    } finally {
+      setEnviandoEmail(false)
+    }
   }
 
   const mudarStatus = async (status) => {
@@ -411,7 +472,7 @@ export default function OrcamentoEditar() {
             </div>
           )}
           <div className="alerta alerta-info" style={{ marginTop: 8 }}>
-            🔒 <b>Orçamento aprovado não pode ser alterado.</b> Para modificar valores, itens ou condições, use o botão <b>Duplicar</b> acima.
+            🔒 <b>Orçamento aprovado não pode ter itens ou valores alterados.</b> Para modificar valores, itens ou condições, use o botão <b>Duplicar</b> acima.
           </div>
         </div>
       )}
@@ -586,19 +647,28 @@ export default function OrcamentoEditar() {
               </div>
               <div className="campo">
                 <label>Referência <small>(opcional)</small></label>
-                <input className="input" value={cliente.referencia} onChange={(e) => setCliente({ ...cliente, referencia: e.target.value })} placeholder="Ex.: Pedido 123 / Material 2º semestre" disabled={travado} />
+                <input className="input" value={cliente.referencia} onChange={(e) => setCliente({ ...cliente, referencia: e.target.value })} placeholder="Ex.: Pedido 123 / Material 2º semestre" />
               </div>
             </div>
             <div className="linha-campos">
               <div className="campo">
                 <label>WhatsApp do cliente</label>
-                <input className="input" value={cliente.whatsapp} inputMode="tel" onChange={(e) => setCliente({ ...cliente, whatsapp: e.target.value })} placeholder="(19) 99999-0000" disabled={travado} />
+                <input className="input" value={cliente.whatsapp} inputMode="tel" onChange={(e) => setCliente({ ...cliente, whatsapp: e.target.value })} placeholder="(19) 99999-0000" />
               </div>
               <div className="campo">
-                <label>E-mail do cliente</label>
-                <input className="input" value={cliente.email} inputMode="email" onChange={(e) => setCliente({ ...cliente, email: e.target.value })} placeholder="compras@cliente.com.br" disabled={travado} />
+                <label>E-mail do cliente / signatário</label>
+                <input className="input" value={cliente.email} inputMode="email" onChange={(e) => setCliente({ ...cliente, email: e.target.value })} placeholder="compras@cliente.com.br" />
               </div>
             </div>
+
+            {travado && (
+              <div style={{ marginTop: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span className="texto-suave" style={{ fontSize: 12 }}>Contato e e-mail podem ser atualizados</span>
+                <button type="button" className="btn btn-secundario btn-pequeno" onClick={salvarContato} disabled={salvandoContato}>
+                  {salvandoContato ? 'Salvando...' : 'Atualizar contato'}
+                </button>
+              </div>
+            )}
 
             {orc?.aprovacao_dados && (
               <div className="dados-consulta-cnpj card-compacto" style={{ marginTop: 12 }}>
@@ -674,12 +744,74 @@ export default function OrcamentoEditar() {
             )}
             <button className="btn btn-secundario" onClick={abrirPdf} disabled={salvando}>Ver / PDF</button>
             <button className="btn btn-secundario" onClick={copiarLink} disabled={salvando} title="Copiar mensagem com link"><IconeLink /> Link</button>
-            <button className="btn btn-secundario" onClick={enviarEmail} disabled={salvando} title="Enviar por e-mail"><IconeEmail /> E-mail</button>
+            <button className="btn btn-secundario" onClick={abrirModalEmail} disabled={salvando || enviandoEmail} title="Enviar por e-mail"><IconeEmail /> E-mail</button>
             <button className="btn btn-verde" onClick={enviarWhats} disabled={salvando}><IconeWhats /> Enviar no WhatsApp</button>
           </div>
         </div>
       )}
       {orc && origem !== 'manual' && <p className="texto-suave" style={{ fontSize: 12, textAlign: 'center' }}>Itens importados de {ORIGEM[origem] || origem}.</p>}
+
+      {/* ---------------- Modal de Envio por E-mail ---------------- */}
+      {modalEmailAberto && (
+        <div className="modal-fundo" onClick={(e) => { if (e.target === e.currentTarget) setModalEmailAberto(false) }}>
+          <div className="modal" style={{ maxWidth: 480 }}>
+            <div className="modal-topo">
+              <h2>{travado ? 'Enviar Comprovante e Orçamento' : 'Enviar Orçamento por E-mail'}</h2>
+              <button type="button" className="modal-fechar" onClick={() => setModalEmailAberto(false)} aria-label="Fechar">×</button>
+            </div>
+            <div className="modal-corpo">
+              {travado && (
+                <div className="alerta alerta-ok" style={{ marginBottom: 14 }}>
+                  <b>Aprovado por:</b> {orc?.aprovado_por || 'Signatário'} {orc?.aprovacao_documento ? `(${orc.aprovacao_doc_tipo || 'Doc'}: ${orc.aprovacao_documento})` : ''}
+                  {orc?.aprovacao_codigo && <> · Código <b>#{orc.aprovacao_codigo}</b></>}
+                </div>
+              )}
+              <p className="texto-suave" style={{ fontSize: 13, marginBottom: 16 }}>
+                {travado
+                  ? 'O destinatário receberá o link para visualizar o orçamento e o comprovante da aprovação eletrônica.'
+                  : 'O cliente receberá a lista de itens, valores e o link para aprovar a proposta.'}
+              </p>
+              <div className="campo">
+                <label><b>E-mail do destinatário (cliente ou signatário) *</b></label>
+                <input
+                  className="input"
+                  type="email"
+                  value={emailDestinatario}
+                  onChange={(e) => setEmailDestinatario(e.target.value)}
+                  placeholder="ex.: compras@cliente.com.br ou signatario@cliente.com.br"
+                  autoFocus
+                />
+              </div>
+              <label className="orc-check" style={{ marginTop: 12 }}>
+                <input
+                  type="checkbox"
+                  checked={salvarNoCadastro}
+                  onChange={(e) => setSalvarNoCadastro(e.target.checked)}
+                />
+                Salvar este e-mail no cadastro do cliente/orçamento
+              </label>
+            </div>
+            <div className="modal-rodape">
+              <button
+                type="button"
+                className="btn btn-secundario"
+                onClick={() => setModalEmailAberto(false)}
+                disabled={enviandoEmail}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="btn btn-primario"
+                onClick={confirmarEnvioEmail}
+                disabled={enviandoEmail || !emailValido(emailDestinatario)}
+              >
+                {enviandoEmail ? 'Enviando e-mail...' : 'Enviar e-mail'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   )
 }

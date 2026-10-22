@@ -59,24 +59,47 @@ export default function Orcamentos() {
     setPedidosLink(data || [])
   }
 
-  useEffect(() => {
-    const carregar = () => supabase
+  const carregarOrcamentos = async () => {
+    const { data, error } = await supabase
       .from('orcamentos')
       .select('id, numero, status, cliente_nome, referencia, origem, frete, desconto, created_at, enviado_em, visualizado_em, visualizacoes, aprovado_em, aprovacao_codigo, orcamento_itens(quantidade, preco_unitario)')
       .order('numero', { ascending: false })
-      .then(({ data, error }) => {
-        if (error) console.error(error)
-        setLista(data || [])
-        setCarregando(false)
-      })
+    if (error) console.error(error)
+    setLista(data || [])
+  }
 
-    carregar()
-    carregarPedidosLink()
-    supabase.rpc('pedidos_recebidos').then(({ data }) => setPedidos(data || []))
+  useEffect(() => {
+    let ativo = true
+    const carregarTudo = async () => {
+      try {
+        const [resOrcs, resPedLink, resPeds] = await Promise.all([
+          supabase
+            .from('orcamentos')
+            .select('id, numero, status, cliente_nome, referencia, origem, frete, desconto, created_at, enviado_em, visualizado_em, visualizacoes, aprovado_em, aprovacao_codigo, orcamento_itens(quantidade, preco_unitario)')
+            .order('numero', { ascending: false }),
+          supabase
+            .from('pedidos_link')
+            .select('*')
+            .eq('status', 'pendente')
+            .order('created_at', { ascending: false }),
+          supabase.rpc('pedidos_recebidos'),
+        ])
+        if (!ativo) return
+        if (resOrcs.data) setLista(resOrcs.data)
+        if (resPedLink.data) setPedidosLink(resPedLink.data)
+        if (resPeds.data) setPedidos(resPeds.data)
+      } catch (err) {
+        console.error(err)
+      } finally {
+        if (ativo) setCarregando(false)
+      }
+    }
+
+    carregarTudo()
 
     // tempo real: cliente abriu ou aprovou orçamento
     const canalOrc = supabase.channel('orcamentos-lista')
-      .on('postgres_changes', { event: 'UPDATE', schema: SCHEMA, table: 'orcamentos' }, carregar)
+      .on('postgres_changes', { event: 'UPDATE', schema: SCHEMA, table: 'orcamentos' }, carregarOrcamentos)
       .subscribe()
 
     // tempo real: novos pedidos chegados pelo link
@@ -85,6 +108,7 @@ export default function Orcamentos() {
       .subscribe()
 
     return () => {
+      ativo = false
       supabase.removeChannel(canalOrc)
       supabase.removeChannel(canalPedLink)
     }
@@ -198,14 +222,14 @@ export default function Orcamentos() {
 
         <div className="link-pedidos-barra">
           <input className="input mono" readOnly value={urlPedidoLink || 'Gerando link...'} style={{ flex: 1 }} />
-          <button className="btn btn-secundario btn-pequeno" onClick={copiarUrlLink}>
-            <IconeLink /> {copiadoLink ? 'Copiado!' : 'Copiar'}
+          <button className="btn btn-primario" onClick={copiarUrlLink}>
+            {copiadoLink ? '✓ Copiado!' : 'Copiar link'}
           </button>
-          <button className="btn btn-verde btn-pequeno" onClick={compartilharWhats}>
+          <button className="btn btn-verde" onClick={compartilharWhats} title="Enviar link por WhatsApp">
             <IconeWhats /> WhatsApp
           </button>
-          <button className="btn btn-secundario btn-pequeno" onClick={alternarLinkAtivo}>
-            {linkAtivo ? 'Desativar link' : 'Ativar link'}
+          <button className="btn btn-secundario btn-pequeno" onClick={alternarLinkAtivo} title="Pausar ou reativar recebimento">
+            {linkAtivo ? 'Pausar link' : 'Ativar link'}
           </button>
           <button className="btn btn-texto btn-pequeno" onClick={gerarNovoLink} title="Invalida o link atual e cria outro">
             Gerar novo
@@ -213,10 +237,10 @@ export default function Orcamentos() {
         </div>
       </div>
 
-      {/* Pedidos pelo link — aguardando você */}
+      {/* Seção Pedidos pelo Link pendentes */}
       {pedidosLink.length > 0 && (
         <div className="card ped-caixa" style={{ marginBottom: 16 }}>
-          <div className="secao-topo" style={{ marginBottom: 10 }}>
+          <div className="secao-topo" style={{ marginBottom: 8 }}>
             <h3>⚡ Pedidos pelo link — aguardando você</h3>
             <span className="badge badge-laranja">{pedidosLink.length} {pedidosLink.length === 1 ? 'pedido' : 'pedidos'}</span>
           </div>

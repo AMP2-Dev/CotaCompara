@@ -24,7 +24,7 @@ export default function PedidoLink() {
 
   // Antispam
   const [honeypot, setHoneypot] = useState('')
-  const [prontoParaEnviar, setProntoParaEnviar] = useState(false)
+  const [prontoParaEnviar, setProntoParaEnviar] = useState(true)
 
   // Envio e resultado
   const [enviando, setEnviando] = useState(false)
@@ -45,14 +45,8 @@ export default function PedidoLink() {
     }
     carregar()
 
-    // Botão fica desabilitado por 3s após abrir a tela (antispam)
-    const t = setTimeout(() => {
-      if (ativo) setProntoParaEnviar(true)
-    }, 3000)
-
     return () => {
       ativo = false
-      clearTimeout(t)
     }
   }, [token])
 
@@ -164,90 +158,105 @@ export default function PedidoLink() {
         <Logo to={null} />
         <div className="card" style={{ maxWidth: 480, margin: '40px auto', textAlign: 'center' }}>
           <h2 style={{ marginBottom: 8 }}>Link indisponível</h2>
-          <p className="texto-suave">{erroInicial}</p>
+          <p className="texto-suave">
+            {erroInicial === 'LINK_DESATIVADO'
+              ? 'Este canal de pedidos foi temporariamente pausado pela empresa. Tente novamente mais tarde ou entre em contato direto.'
+              : erroInicial === 'LINK_INVALIDO'
+              ? 'O link que você acessou não existe ou foi alterado pela empresa.'
+              : erroInicial}
+          </p>
         </div>
       </div>
     )
   }
-
-  const localizacao = [empresa?.cidade, empresa?.uf].filter(Boolean).join(' / ')
 
   if (sucesso) {
     return (
-      <div className="pedido-link-wrap">
-        <div className="pedido-link-card sucesso">
-          <div className="sucesso-icone">✓</div>
-          <h2>Pedido enviado com sucesso!</h2>
-          <p className="sucesso-sub">
-            Protocolo: <b className="mono destaque-proto">{sucesso.protocolo}</b>
-          </p>
-          <p className="sucesso-texto">
-            A empresa <b>{empresa?.nome}</b> recebeu seu pedido de orçamento e responderá pelo{' '}
-            {whatsapp && email ? 'WhatsApp ou e-mail' : whatsapp ? 'WhatsApp' : 'e-mail'} informado.
-          </p>
+      <div className="pedido-link-pagina">
+        <div className="pedido-link-container">
+          <div className="card pedido-sucesso-card">
+            <div className="sucesso-icone">✓</div>
+            <h2>Pedido enviado com sucesso!</h2>
+            <p className="texto-suave">
+              A empresa <b>{empresa.nome}</b> recebeu seus itens e vai preparar o seu orçamento.
+            </p>
 
-          <div className="sucesso-acoes">
+            <div className="pedido-protocolo-bloco">
+              <span className="rotulo">Número do protocolo</span>
+              <span className="mono valor">{sucesso.protocolo}</span>
+              <small className="texto-suave">Guarde este código para acompanhar ou tirar dúvidas.</small>
+            </div>
+
+            <div className="alerta alerta-info" style={{ textAlign: 'left', marginTop: 16 }}>
+              Assim que os preços e condições estiverem prontos, a empresa entrará em contato pelo seu{' '}
+              {whatsapp && email ? 'WhatsApp ou e-mail' : whatsapp ? 'WhatsApp' : 'e-mail'}.
+            </div>
+
             <button
+              type="button"
               className="btn btn-secundario"
+              style={{ marginTop: 20 }}
               onClick={() => {
                 setSucesso(null)
-                setItens([itemVazio(), itemVazio(), itemVazio()])
+                setNome('')
+                setWhatsapp('')
+                setEmail('')
+                setDocumento('')
                 setObservacoes('')
+                setItens([itemVazio(), itemVazio(), itemVazio()])
               }}
             >
-              Fazer outro pedido
+              Fazer outro pedido para esta empresa
             </button>
-          </div>
-
-          <div className="pedido-link-cta">
-            <Logo to={null} />
-            <div>
-              <b>Você também compra para sua empresa ou condomínio?</b>
-              <p>Com o CotaCompara você envia cotações para vários fornecedores e compara os preços automaticamente.</p>
-              <Link to="/cadastro" className="btn btn-primario btn-pequeno">
-                Conhecer o CotaCompara grátis
-              </Link>
-            </div>
           </div>
         </div>
       </div>
     )
   }
 
+  const local = [empresa.cidade, empresa.uf].filter(Boolean).join(' / ')
+
   return (
-    <div className="pedido-link-wrap">
-      <div className="pedido-link-card">
-        <header className="pedido-link-cab">
-          <div className="pedido-link-subtitulo">Pedido de orçamento direto para</div>
-          <h1 className="pedido-link-titulo">{empresa?.nome}</h1>
-          {localizacao && <div className="pedido-link-local">{localizacao}</div>}
-        </header>
+    <div className="pedido-link-pagina">
+      <div className="pedido-link-container">
+        {/* Topo da empresa */}
+        <div className="pedido-link-topo card">
+          <div className="empresa-info">
+            <span className="badge-topo">Solicitação de Orçamento</span>
+            <h1>{empresa.nome}</h1>
+            <div className="empresa-meta texto-suave">
+              {empresa.documento && <span>{mascaraDocumento(empresa.documento)}</span>}
+              {local && <span>{local}</span>}
+              {empresa.telefone && <span>{empresa.telefone}</span>}
+            </div>
+            <p className="empresa-descricao">
+              Preencha os itens que você precisa e seus dados de contato. Nós retornaremos com o orçamento completo.
+            </p>
+          </div>
+        </div>
 
-        {erroEnvio && <div className="alerta alerta-erro">{erroEnvio}</div>}
+        {/* Formulário de envio */}
+        <form onSubmit={enviar} className="pedido-link-form card">
+          {erroEnvio && <div className="alerta alerta-erro" style={{ marginBottom: 16 }}>{erroEnvio}</div>}
 
-        <form onSubmit={enviar}>
-          {/* Honeypot invisível para bots */}
-          <div style={{ display: 'none' }} aria-hidden="true">
-            <label>Não preencha este campo:</label>
+          {/* Campo honeypot invisível para enganar bots de spam */}
+          <div style={{ position: 'absolute', left: '-9999px', opacity: 0 }} aria-hidden="true">
             <input
-              type="text"
-              name="empresa_site"
               tabIndex={-1}
               autoComplete="off"
               value={honeypot}
               onChange={(e) => setHoneypot(e.target.value)}
+              placeholder="Não preencha este campo"
             />
           </div>
 
           <div className="secao-form">
             <h3>1. Seus dados de contato</h3>
             <div className="campo">
-              <label>
-                Seu nome ou Razão Social <span className="obrigatorio">*</span>
-              </label>
+              <label>Seu nome ou Razão Social *</label>
               <input
                 className="input"
-                placeholder="Ex.: João Silva ou Silva Materiais Ltda"
+                placeholder="Ex.: Maria Souza ou Papelaria Brasil Ltda"
                 value={nome}
                 onChange={(e) => setNome(e.target.value)}
                 maxLength={120}
@@ -255,15 +264,16 @@ export default function PedidoLink() {
               />
             </div>
 
-            <div className="grid grid-2-col">
+            <div className="linha-campos">
               <div className="campo">
-                <label>WhatsApp</label>
+                <label>WhatsApp <small>(com DDD)</small></label>
                 <input
                   className="input"
                   type="tel"
-                  placeholder="(00) 00000-0000"
+                  placeholder="(19) 99999-0000"
                   value={whatsapp}
                   onChange={(e) => handleWhatsapp(e.target.value)}
+                  maxLength={15}
                 />
               </div>
 
@@ -272,66 +282,55 @@ export default function PedidoLink() {
                 <input
                   className="input"
                   type="email"
-                  placeholder="seu@email.com"
+                  placeholder="seu@email.com.br"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   maxLength={120}
                 />
               </div>
             </div>
-            <p className="texto-suave" style={{ fontSize: 12, marginTop: -4, marginBottom: 12 }}>
-              * Informe pelo menos WhatsApp ou e-mail para receber o orçamento.
-            </p>
 
             <div className="campo">
-              <label>CNPJ ou CPF (opcional)</label>
+              <label>CNPJ ou CPF <small>(opcional)</small></label>
               <input
-                className="input mono"
-                placeholder="00.000.000/0000-00"
+                className="input"
+                placeholder="Para emissão de nota ou faturamento"
                 value={documento}
                 onChange={(e) => setDocumento(mascaraDocumento(e.target.value))}
+                maxLength={18}
               />
             </div>
           </div>
 
           <div className="secao-form">
-            <div className="secao-form-topo">
-              <h3>2. Produtos que você precisa</h3>
-              <span className="texto-suave" style={{ fontSize: 13 }}>
-                {itens.length}/10 itens
-              </span>
+            <div className="secao-form-cab">
+              <h3>2. O que você precisa cotar? (até 10 itens)</h3>
+              <small className="texto-suave">Digite o produto e a quantidade</small>
             </div>
 
             <div className="pedido-itens-lista">
               {itens.map((it, idx) => (
                 <div key={idx} className="pedido-item-linha">
-                  <div className="pedido-item-num">{idx + 1}</div>
-                  <div className="pedido-item-campos">
-                    <div className="pedido-item-principal">
+                  <span className="item-num">{idx + 1}</span>
+                  <div className="item-campos">
+                    <div className="item-linha-principal">
                       <input
-                        className="input"
-                        placeholder="Nome ou descrição do produto *"
+                        className="input item-prod"
+                        placeholder="Nome do produto ou descrição"
                         value={it.produto}
                         onChange={(e) => mudarItem(idx, 'produto', e.target.value)}
                         maxLength={200}
                       />
-                    </div>
-                    <div className="pedido-item-detalhes">
-                      <div className="item-qtd-wrap">
-                        <label className="rotulo-mini">Qtd</label>
+                      <div className="item-qtd-un">
                         <input
-                          className="input"
-                          type="text"
+                          className="input item-qtd"
                           inputMode="decimal"
-                          placeholder="1"
+                          placeholder="Qtd"
                           value={it.quantidade}
                           onChange={(e) => mudarItem(idx, 'quantidade', e.target.value)}
                         />
-                      </div>
-                      <div className="item-un-wrap">
-                        <label className="rotulo-mini">Unid.</label>
                         <select
-                          className="input select"
+                          className="select item-un"
                           value={it.unidade}
                           onChange={(e) => mudarItem(idx, 'unidade', e.target.value)}
                         >
@@ -396,7 +395,7 @@ export default function PedidoLink() {
               className="btn btn-primario btn-grande btn-bloco"
               disabled={enviando || !prontoParaEnviar}
             >
-              {enviando ? 'Enviando seu pedido...' : !prontoParaEnviar ? 'Aguarde um instante...' : 'Enviar pedido de orçamento'}
+              {enviando ? 'Enviando seu pedido...' : 'Enviar pedido de orçamento'}
             </button>
             <p className="texto-suave" style={{ fontSize: 12, textAlign: 'center', marginTop: 8 }}>
               Ao enviar, a empresa receberá sua lista para precificar e responder.
